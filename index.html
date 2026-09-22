@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Swara Pocket</title>
+<meta name="theme-color" content="#191C28">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Spectral:ital,wght@0,400;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+/* Dark-first: the bare :root carries the dark palette, light swaps in below. */
+:root{
+  --stage:#191C28;
+  --panel:#212535;
+  --edge:#343A4E;
+  --ink:#98A0B6;
+  --ink-hi:#DDE1EC;
+  --white-key:#E8E1D0;
+  --black-key:#2A2118;
+  --key-label:#7E7765;
+  --brass:#C9922E;
+  --brass-ink:#20180B;
+  --trace:#8CB89A;
+  --rec:#D0705F;
+  --good:#8CB89A;
+  --row-dark:rgba(0,0,0,.20);
+  --grid-c:rgba(232,225,208,.18);
+  --sa-row:rgba(201,146,46,.15);
+  --scrim:rgba(10,12,18,.55);
+  --serif:'Spectral',Georgia,'Times New Roman',serif;
+  --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){
+  :root:not([data-theme="dark"]){
+    --stage:#E9ECF2; --panel:#F7F8FB; --edge:#CDD2DE; --ink:#5A6278; --ink-hi:#1D2232;
+    --white-key:#FFFFFF; --black-key:#2A2118; --key-label:#9A937F;
+    --brass:#A8741A; --brass-ink:#FFFFFF; --trace:#2F7A52; --rec:#B4503F; --good:#2F7A52;
+    --row-dark:rgba(30,36,52,.06); --grid-c:rgba(30,36,52,.16); --sa-row:rgba(168,116,26,.12);
+    --scrim:rgba(20,24,36,.35); color-scheme:light;
+  }
+}
+:root[data-theme="light"]{
+  --stage:#E9ECF2; --panel:#F7F8FB; --edge:#CDD2DE; --ink:#5A6278; --ink-hi:#1D2232;
+  --white-key:#FFFFFF; --black-key:#2A2118; --key-label:#9A937F;
+  --brass:#A8741A; --brass-ink:#FFFFFF; --trace:#2F7A52; --rec:#B4503F; --good:#2F7A52;
+  --row-dark:rgba(30,36,52,.06); --grid-c:rgba(30,36,52,.16); --sa-row:rgba(168,116,26,.12);
+  --scrim:rgba(20,24,36,.35); color-scheme:light;
+}
+
+html,body{height:100%}
+body{margin:0;background:var(--stage);color:var(--ink);font-family:var(--sans);font-size:15px;
+  -webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+.app{height:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:10px;
+  padding-inline:16px;padding-block:10px 12px;max-width:760px;margin:0 auto}
+
+/* readout */
+.readout{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;min-height:66px}
+.now{display:flex;align-items:baseline;gap:12px;min-width:0}
+.note{font-family:var(--serif);font-size:56px;line-height:.9;color:var(--ink-hi);font-variant-numeric:tabular-nums}
+.note.idle{color:var(--edge)}
+.sw{font-family:var(--serif);font-style:italic;font-size:32px;color:var(--brass);line-height:1}
+.side{text-align:right;padding-bottom:4px}
+.cents{font-family:var(--serif);font-size:22px;color:var(--ink-hi);font-variant-numeric:tabular-nums}
+.cents.good{color:var(--good)}
+.hz{font-size:12px;color:var(--ink);font-variant-numeric:tabular-nums;padding-top:2px}
+
+/* stage */
+.stagewrap{position:relative;flex:1;min-height:0;border-radius:6px;overflow:hidden;background:var(--panel)}
+.scroller{position:absolute;inset:0;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;scrollbar-width:thin}
+#cv{display:block;width:100%}
+[hidden]{display:none!important}
+.msg{position:absolute;left:12px;right:12px;bottom:12px;background:var(--stage);border:1px solid var(--edge);
+  border-radius:6px;padding:12px 14px;font-size:14px;line-height:1.5;color:var(--ink-hi)}
+.pbar{position:absolute;left:10px;right:10px;top:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:var(--stage);border:1px solid var(--edge);border-radius:6px;padding:8px 8px 8px 12px;font-size:14px;color:var(--ink-hi);
+  font-variant-numeric:tabular-nums}
+
+/* options row */
+.opts{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;font-size:14px}
+.opts label{display:flex;align-items:center;gap:8px}
+select{background:var(--panel);color:var(--ink-hi);border:1px solid var(--edge);border-radius:4px;
+  font:inherit;padding:7px 8px}
+.seg{display:flex;border:1px solid var(--edge);border-radius:4px;overflow:hidden}
+.seg button{background:transparent;border:0;color:var(--ink);font:inherit;padding:7px 12px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--panel);color:var(--ink-hi)}
+
+/* bottom bar */
+.bar{display:grid;grid-template-columns:1.2fr 1fr 1fr;gap:8px}
+.btn{height:50px;border-radius:6px;border:1px solid var(--edge);background:var(--panel);color:var(--ink-hi);
+  font:inherit;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn.primary{background:var(--brass);border-color:var(--brass);color:var(--brass-ink);font-weight:600}
+.btn.rec{color:var(--rec);border-color:var(--rec)}
+.btn.rec.live{background:var(--rec);color:var(--stage)}
+.btn:disabled{opacity:.4;cursor:default}
+.btn.small{height:36px;padding:0 14px;font-size:14px}
+.dot{width:9px;height:9px;border-radius:50%;background:currentColor;display:inline-block}
+.btn:focus-visible,select:focus-visible,.seg button:focus-visible,.row button:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+
+/* takes sheet */
+.scrim{position:fixed;inset:0;background:var(--scrim);z-index:10}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:11;max-height:72%;overflow:auto;background:var(--stage);
+  border-top:1px solid var(--edge);border-radius:14px 14px 0 0;
+  padding:16px 16px calc(18px + env(safe-area-inset-bottom, 0px))}
+.sheet-in{max-width:728px;margin:0 auto}
+.sheet h2{font-family:var(--serif);font-weight:400;font-size:22px;color:var(--ink-hi);margin:0}
+.sheet-head{display:flex;justify-content:space-between;align-items:center;padding-bottom:10px}
+.note-small{font-size:13px;color:var(--ink);line-height:1.5;margin:0 0 8px}
+.row{display:grid;grid-template-columns:1fr auto;gap:6px 12px;padding:12px 0;border-top:1px solid var(--edge)}
+.row .when{color:var(--ink-hi);font-size:15px}
+.row .meta{font-size:13px;color:var(--ink);font-variant-numeric:tabular-nums}
+.row .acts{grid-column:1 / -1;display:flex;gap:8px}
+.row button{background:var(--panel);border:1px solid var(--edge);color:var(--ink-hi);border-radius:4px;font:inherit;
+  font-size:14px;padding:8px 14px;cursor:pointer}
+.row button.danger{color:var(--rec)}
+.empty{padding:14px 0;border-top:1px solid var(--edge);color:var(--ink);font-size:14px;line-height:1.5}
+@media (prefers-reduced-motion: reduce){*{scroll-behavior:auto}}
+</style>
+
+</head>
+<body>
+<div class="app">
+  <header class="readout">
+    <div class="now"><span id="rNote" class="note idle">—</span><span id="rSw" class="sw"></span></div>
+    <div class="side"><div id="rCents" class="cents">&nbsp;</div><div id="rHz" class="hz">&nbsp;</div></div>
+  </header>
+
+  <div class="stagewrap" id="stagewrap">
+    <div class="scroller" id="scroller"><canvas id="cv" aria-label="Pitch trace over a piano keyboard from C2 to C5"></canvas></div>
+    <div class="pbar" id="pbar" hidden><span id="pbarText">Playing</span><button class="btn small" id="pbarStop" type="button">Stop</button></div>
+    <div class="msg" id="msg" hidden></div>
+  </div>
+
+  <div class="opts">
+    <label for="sa">Sa <select id="sa"></select></label>
+  </div>
+
+  <nav class="bar">
+    <button class="btn primary" id="listen" type="button">Listen</button>
+    <button class="btn rec" id="rec" type="button"><span class="dot"></span><span id="recLabel">Record</span></button>
+    <button class="btn" id="takesBtn" type="button">Takes</button>
+  </nav>
+</div>
+
+<div class="scrim" id="scrim" hidden></div>
+<section class="sheet" id="sheet" hidden aria-label="Recorded takes">
+  <div class="sheet-in">
+    <div class="sheet-head"><h2>Takes</h2><button class="btn small" id="sheetClose" type="button">Close</button></div>
+    <p class="note-small" id="storeNote">Takes are kept on this phone, in this browser.</p>
+    <div id="takeList"></div>
+  </div>
+</section>
+
+<script>
+/* Swara Pocket — phone pitch monitor and recorder.
+   Author: Lakmal Weerasinghe */
+
+/* ---------- note maths ---------- */
+const NAMES = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const SWARA = ['S','r','R','g','G','M','m','P','d','D','n','N'];
+const IS_BLACK = [0,1,0,1,0,0,1,0,1,0,1,0];
+const LOW = 36, HIGH = 72;                      // C2 .. C5
+const ftom = f => 69 + 12 * Math.log2(f / 440);
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+const pc = m => ((m % 12) + 12) % 12;
+const nameOf = m => NAMES[pc(m)] + (Math.floor(m / 12) - 1);
+const swaraOf = (m, sa) => SWARA[pc(m - sa)];
+const $ = id => document.getElementById(id);
+
+let saMidi = 48;                                 // C3
+const saSel = $('sa');
+for (let m = 36; m <= 60; m++) {
+  const o = document.createElement('option');
+  o.value = m; o.textContent = nameOf(m); if (m === saMidi) o.selected = true;
+  saSel.appendChild(o);
+}
+saSel.addEventListener('change', e => { saMidi = +e.target.value; draw(); if (!listening) centreOnSa(); });
+
+/* ---------- theme colours for the canvas ---------- */
+const C = {};
+function readColors() {
+  const cs = getComputedStyle(document.documentElement);
+  ['panel','edge','ink','ink-hi','white-key','black-key','key-label','brass','trace','rec','row-dark','grid-c','sa-row']
+    .forEach(k => C[k] = cs.getPropertyValue('--' + k).trim());
+}
+readColors();
+try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { readColors(); draw(); }); } catch (e) {}
+new MutationObserver(() => { readColors(); draw(); })
+  .observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+
+/* ---------- keyboard geometry ----------
+   Laid out like a real piano turned on its side: 22 equal white keys from
+   C2 (bottom) to C5 (top), black keys sitting across the gap between two
+   whites. A pitch is placed by interpolating between neighbouring key centres. */
+const WHITES = [];
+for (let m = HIGH; m >= LOW; m--) if (!IS_BLACK[pc(m)]) WHITES.push(m);   // top to bottom
+const whiteIdx = {}; WHITES.forEach((m, i) => whiteIdx[m] = i);
+let WH = 30;                                       // white key height in CSS px
+const centreOf = m => IS_BLACK[pc(m)] ? (whiteIdx[m + 1] + 1) * WH : (whiteIdx[m] + 0.5) * WH;
+function yOf(m) {
+  if (m <= LOW) return centreOf(LOW) + (LOW - m) * WH;
+  if (m >= HIGH) return centreOf(HIGH) - (m - HIGH) * WH;
+  const a = Math.floor(m), f = m - a;
+  return centreOf(a) + (centreOf(a + 1) - centreOf(a)) * f;
+}
+
+/* ---------- canvas ---------- */
+const cv = $('cv'), g = cv.getContext('2d'), scroller = $('scroller');
+let W = 0, H = 0, VH = 0;
+function size() {
+  const r = $('stagewrap').getBoundingClientRect();
+  const dpr = window.devicePixelRatio || 1;
+  W = r.width; VH = r.height;
+  WH = Math.max(30, VH / WHITES.length);
+  H = Math.round(WH * WHITES.length);
+  cv.style.height = H + 'px';
+  cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr);
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  draw();
+}
+new ResizeObserver(size).observe($('stagewrap'));
+
+/* keep the sung note in view unless the keyboard was scrolled by hand recently */
+let lastSet = -1, userScrollAt = 0;
+function setScroll(v) {
+  v = Math.max(0, Math.min(H - VH, v));
+  lastSet = Math.round(v); scroller.scrollTop = v;
+}
+scroller.addEventListener('scroll', () => {
+  if (Math.abs(scroller.scrollTop - lastSet) > 2) userScrollAt = performance.now();
+}, { passive: true });
+function followView(m) {
+  if (m == null || H <= VH + 1 || performance.now() - userScrollAt < 2500) return;
+  const y = yOf(m), top = scroller.scrollTop;
+  if (y < top + VH * 0.25 || y > top + VH * 0.75) {
+    const target = y - VH / 2;
+    setScroll(top + (target - top) * 0.15);
+  }
+}
+function centreOnSa() { if (H > VH) setScroll(yOf(saMidi + 7) - VH / 2); }
+
+/* ---------- state ---------- */
+let listening = false, ctx = null, stream = null, analyser = null, buf = null;
+let live = [], hist = [], cur = null, example = true;
+let recording = null;                            // {t0, frames, mr, chunks, type}
+let playing = null;                              // {take, audio, url, start}
+let wake = null;
+
+/* example trace so the screen shows what it does before the first note */
+const exampleFrames = (() => {
+  const steps = [0, 2, 4, 5, 7, 5, 4, 2, 0];
+  const out = [], per = 0.66;
+  for (let i = 0; i < steps.length; i++) {
+    for (let k = 0; k < per * 30; k++) {
+      const u = k / (per * 30);
+      if (u > 0.9) { out.push({ t: i * per + u * per, m: null }); continue; }
+      const scoop = u < 0.18 ? -0.35 * (1 - u / 0.18) : 0;
+      out.push({ t: i * per + u * per, m: 48 + steps[i] + scoop + 0.03 * Math.sin(u * 30) });
+    }
+  }
+  return out;
+})();
+
+/* ---------- pitch detection (McLeod NSDF) ---------- */
+const WIN = 1024;
+function detect(x, sr) {
+  let rms = 0;
+  for (let i = 0; i < WIN; i++) rms += x[i] * x[i];
+  rms = Math.sqrt(rms / WIN);
+  if (rms < 0.0015) return 0;
+  const minTau = Math.max(2, Math.floor(sr / 1100));
+  const maxTau = Math.min(Math.floor(sr / 55), x.length - WIN);
+  const nsdf = new Float32Array(maxTau + 2);
+  for (let tau = minTau; tau <= maxTau; tau++) {
+    let acf = 0, div = 0;
+    for (let i = 0; i < WIN; i++) { const a = x[i], b = x[i + tau]; acf += a * b; div += a * a + b * b; }
+    nsdf[tau] = div > 0 ? (2 * acf) / div : 0;
+  }
+  const peaks = [];
+  let tau = minTau;
+  while (tau < maxTau && nsdf[tau] > 0) tau++;
+  while (tau < maxTau) {
+    if (nsdf[tau] > 0 && nsdf[tau - 1] <= 0) {
+      let best = tau;
+      while (tau < maxTau && nsdf[tau] > 0) { if (nsdf[tau] > nsdf[best]) best = tau; tau++; }
+      peaks.push(best);
+    } else tau++;
+  }
+  if (!peaks.length) return 0;
+  let hi = 0; for (const p of peaks) if (nsdf[p] > hi) hi = nsdf[p];
+  if (hi < 0.55) return 0;
+  let chosen = peaks[0];
+  for (const p of peaks) { if (nsdf[p] >= 0.9 * hi) { chosen = p; break; } }
+  const y0 = nsdf[chosen - 1] || 0, y1 = nsdf[chosen], y2 = nsdf[chosen + 1] || 0;
+  const den = 2 * (2 * y1 - y0 - y2);
+  const hz = sr / (chosen + (den !== 0 ? (y2 - y0) / den : 0));
+  return (hz > 55 && hz < 1100) ? hz : 0;
+}
+
+function analyse() {
+  analyser.getFloatTimeDomainData(buf);
+  const hz = detect(buf, ctx.sampleRate);
+  const raw = hz ? ftom(hz) : null;
+  hist.push(raw); if (hist.length > 3) hist.shift();
+  let m = null;
+  if (raw != null) {                              // median of recent voiced frames kills octave blips
+    const v = hist.filter(a => a != null).sort((a, b) => a - b);
+    m = v[Math.floor(v.length / 2)];
+  }
+  const t = performance.now() / 1000;
+  live.push({ t, m });
+  while (live.length && t - live[0].t > 9) live.shift();
+  cur = m;
+  if (recording) recording.frames.push({ t: +(t - recording.t0).toFixed(3), m: m == null ? null : +m.toFixed(3) });
+  paintReadout(m);
+}
+
+/* ---------- readout ---------- */
+function paintReadout(m) {
+  const n = $('rNote'), s = $('rSw'), c = $('rCents'), h = $('rHz');
+  if (m == null) {
+    n.textContent = '—'; n.classList.add('idle'); s.textContent = '';
+    c.innerHTML = '&nbsp;'; c.classList.remove('good'); h.innerHTML = '&nbsp;';
+    return;
+  }
+  const k = Math.round(m), cents = Math.round((m - k) * 100);
+  n.classList.remove('idle');
+  n.textContent = nameOf(k);
+  s.textContent = swaraOf(k, saMidi);
+  c.textContent = (cents > 0 ? '+' : cents < 0 ? '−' : '') + Math.abs(cents) + ' cents';
+  c.classList.toggle('good', Math.abs(cents) <= 10);
+  h.textContent = mtof(m).toFixed(1) + ' Hz';
+}
+
+/* ---------- drawing ---------- */
+const TRACE_SECS = 6;
+function source() {
+  if (playing) {
+    const now = playClock(), fr = playing.take.frames;
+    let lo = 0, hi = fr.length - 1, idx = -1;
+    while (lo <= hi) { const mid = (lo + hi) >> 1; if (fr[mid].t <= now) { idx = mid; lo = mid + 1; } else hi = mid - 1; }
+    return { frames: fr, now, cur: idx >= 0 ? fr[idx].m : null };
+  }
+  if (listening || live.length) return { frames: live, now: listening ? performance.now() / 1000 : (live.length ? live[live.length - 1].t : 0), cur };
+  return { frames: exampleFrames, now: exampleFrames[exampleFrames.length - 1].t, cur: null, example: true };
+}
+
+function draw() {
+  if (!W || !H) return;
+  const src = source();
+  followView(src.cur);
+  g.clearRect(0, 0, W, H);
+  g.fillStyle = C.panel; g.fillRect(0, 0, W, H);
+
+  const KW = Math.round(Math.min(170, Math.max(104, W * 0.36)));   // key length
+  const BL = KW * 0.62, BH = WH * 0.58;                           // black key length and thickness
+  const active = src.cur == null ? null : Math.round(Math.max(LOW, Math.min(HIGH, src.cur)));
+  const onSa = m => pc(m - saMidi) === 0;
+
+  // lanes across the trace area follow the same key geometry
+  WHITES.forEach((m, i) => {
+    const y = i * WH;
+    if (onSa(m)) { g.fillStyle = C['sa-row']; g.fillRect(KW, y, W - KW, WH); }
+    g.fillStyle = pc(m) === 0 ? C['grid-c'] : C['row-dark'];
+    g.fillRect(KW, y + WH - (pc(m) === 0 ? 1 : 0.5), W - KW, pc(m) === 0 ? 1 : 0.5);
+  });
+  for (let m = LOW + 1; m < HIGH; m++) {
+    if (!IS_BLACK[pc(m)]) continue;
+    const cy = centreOf(m);
+    g.fillStyle = onSa(m) ? C['sa-row'] : C['row-dark'];
+    g.fillRect(KW, cy - BH / 2, W - KW, BH);
+  }
+
+  // white keys
+  WHITES.forEach((m, i) => {
+    const y = i * WH;
+    g.fillStyle = m === active ? C.brass : C['white-key'];
+    g.fillRect(0, y, KW, WH);
+    g.fillStyle = C.edge; g.fillRect(0, y + WH - 1, KW, 1);
+  });
+  // black keys, straddling the gap between their two white neighbours
+  for (let m = LOW + 1; m < HIGH; m++) {
+    if (!IS_BLACK[pc(m)]) continue;
+    const cy = centreOf(m);
+    g.fillStyle = m === active ? C.brass : C['black-key'];
+    const r = Math.min(4, BH / 3);
+    g.beginPath();
+    g.moveTo(0, cy - BH / 2); g.lineTo(BL - r, cy - BH / 2);
+    g.quadraticCurveTo(BL, cy - BH / 2, BL, cy - BH / 2 + r);
+    g.lineTo(BL, cy + BH / 2 - r);
+    g.quadraticCurveTo(BL, cy + BH / 2, BL - r, cy + BH / 2);
+    g.lineTo(0, cy + BH / 2); g.closePath(); g.fill();
+  }
+  // labels: every C by name, Sa marked wherever it falls
+  const font = getComputedStyle(document.body).fontFamily;
+  g.font = Math.round(Math.min(14, WH * 0.45)) + 'px ' + font;
+  g.textAlign = 'right'; g.textBaseline = 'middle';
+  WHITES.forEach(m => {
+    if (pc(m) !== 0 && !onSa(m)) return;
+    const txt = (pc(m) === 0 ? nameOf(m) : '') + (onSa(m) ? (pc(m) === 0 ? '  S' : 'S') : '');
+    g.fillStyle = m === active ? C['panel'] : (onSa(m) ? C.brass : C['key-label']);
+    g.fillText(txt, KW - 8, centreOf(m));
+  });
+  for (let m = LOW + 1; m < HIGH; m++) {
+    if (!IS_BLACK[pc(m)] || !onSa(m)) continue;
+    g.fillStyle = m === active ? C['panel'] : C.brass;
+    g.textAlign = 'left'; g.fillText('S', BL + 6, centreOf(m));
+    g.textAlign = 'right';
+  }
+  g.fillStyle = C.edge; g.fillRect(KW, 0, 1, H);
+
+  // trace, newest at the right edge
+  const x0 = KW + 1, x1 = W - 14;
+  const xOf = t => x1 - (src.now - t) / TRACE_SECS * (x1 - x0);
+  g.lineWidth = 3; g.lineJoin = 'round'; g.lineCap = 'round';
+  g.strokeStyle = C.trace; g.globalAlpha = src.example ? 0.55 : 1;
+  g.beginPath();
+  let pen = false, prevT = -1;
+  for (const f of src.frames) {
+    if (f.t < src.now - TRACE_SECS - 0.2 || f.t > src.now) { pen = false; continue; }
+    if (f.m == null || (prevT >= 0 && f.t - prevT > 0.2)) { pen = false; if (f.m == null) { prevT = f.t; continue; } }
+    const X = xOf(f.t), Y = yOf(f.m);
+    if (pen) g.lineTo(X, Y); else { g.moveTo(X, Y); pen = true; }
+    prevT = f.t;
+  }
+  g.stroke(); g.globalAlpha = 1;
+
+  if (src.cur != null) {
+    g.fillStyle = C.brass;
+    g.beginPath(); g.arc(x1, yOf(src.cur), 7, 0, Math.PI * 2); g.fill();
+  }
+  if (src.example) {
+    g.fillStyle = C.ink; g.textAlign = 'left'; g.textBaseline = 'middle';
+    g.font = '13px ' + font;
+    g.fillText('Example: Sa to Pa and back', KW + 12, yOf(saMidi + 9));
+  }
+}
+
+/* ---------- animation loop (runs only while something is moving) ---------- */
+let raf = null, tick = 0;
+function kick() { if (!raf) raf = requestAnimationFrame(loop); }
+function loop() {
+  raf = null;
+  if (listening && !playing && (++tick % 2 === 0)) analyse();
+  if (playing) {
+    const t = playClock(), d = playing.take.dur;
+    $('pbarText').textContent = 'Playing take  ' + fmt(Math.min(t, d)) + ' / ' + fmt(d);
+    if (!playing.audio && t > d + 0.3) stopPlay();
+  }
+  if (recording) $('recLabel').textContent = 'Stop  ' + fmt(performance.now() / 1000 - recording.t0);
+  draw();
+  if (listening || playing) raf = requestAnimationFrame(loop);
+}
+const fmt = s => Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0');
+
+/* ---------- microphone ---------- */
+function showMsg(text) { const m = $('msg'); m.textContent = text; m.hidden = false; }
+function hideMsg() { $('msg').hidden = true; }
+
+async function startListening() {
+  if (listening) return true;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    showMsg('This page cannot reach the microphone here. It needs to be opened over https in Chrome.');
+    return false;
+  }
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+    });
+  } catch (e) {
+    showMsg(e && (e.name === 'NotAllowedError' || e.name === 'SecurityError')
+      ? 'Microphone access was refused. In Chrome, tap the icon left of the address, allow Microphone, then tap Listen again.'
+      : 'No microphone was found. Check that no other app is using it, then tap Listen again.');
+    return false;
+  }
+  ctx = new (window.AudioContext || window.webkitAudioContext)();
+  try { await ctx.resume(); } catch (e) {}
+  const srcNode = ctx.createMediaStreamSource(stream);
+  analyser = ctx.createAnalyser(); analyser.fftSize = 2048;
+  buf = new Float32Array(analyser.fftSize);
+  srcNode.connect(analyser);
+  listening = true; example = false; live = []; hist = [];
+  hideMsg();
+  $('listen').textContent = 'Stop listening';
+  holdScreen();
+  kick();
+  return true;
+}
+
+function stopListening() {
+  if (recording) stopRec();
+  listening = false; cur = null;
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  if (ctx) ctx.close().catch(() => {});
+  stream = null; ctx = null;
+  $('listen').textContent = 'Listen';
+  paintReadout(null);
+  releaseScreen();
+  draw();
+}
+
+$('listen').onclick = () => { if (playing) stopPlay(); listening ? stopListening() : startListening(); };
+
+/* keep the screen awake while practising */
+async function holdScreen() {
+  try { if ('wakeLock' in navigator) wake = await navigator.wakeLock.request('screen'); } catch (e) { wake = null; }
+}
+function releaseScreen() { try { if (wake) wake.release(); } catch (e) {} wake = null; }
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && listening) holdScreen(); });
+
+/* ---------- recording ---------- */
+function pickType() {
+  if (!window.MediaRecorder) return '';
+  for (const t of ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']) {
+    try { if (MediaRecorder.isTypeSupported(t)) return t; } catch (e) {}
+  }
+  return '';
+}
+
+async function startRec() {
+  if (playing) stopPlay();
+  if (!(await startListening())) return;
+  const type = pickType();
+  recording = { t0: performance.now() / 1000, frames: [], chunks: [], type, mr: null };
+  try {
+    const mr = type ? new MediaRecorder(stream, { mimeType: type }) : new MediaRecorder(stream);
+    mr.ondataavailable = e => { if (e.data && e.data.size) recording && recording.chunks.push(e.data); };
+    recording.mr = mr;
+    mr.start(1000);
+  } catch (e) { recording.mr = null; }
+  $('rec').classList.add('live');
+  kick();
+}
+
+function stopRec() {
+  const r = recording; if (!r) return;
+  recording = null;
+  $('rec').classList.remove('live');
+  $('recLabel').textContent = 'Record';
+  const finish = () => {
+    const voiced = r.frames.filter(f => f.m != null);
+    if (!r.frames.length) return;
+    const type = (r.mr && r.mr.mimeType) || r.type || 'audio/webm';
+    const take = {
+      id: Date.now(),
+      when: new Date().toISOString(),
+      dur: r.frames[r.frames.length - 1].t,
+      sa: saMidi,
+      frames: r.frames,
+      audio: r.chunks.length ? new Blob(r.chunks, { type }) : null,
+      ext: /mp4/.test(type) ? 'mp4' : 'webm',
+      voiced: voiced.length
+    };
+    putTake(take).then(renderTakes);
+  };
+  if (r.mr && r.mr.state !== 'inactive') { r.mr.onstop = finish; r.mr.stop(); } else finish();
+}
+
+$('rec').onclick = () => recording ? stopRec() : startRec();
+
+/* ---------- storage: IndexedDB, falling back to memory ---------- */
+let db = null, mem = [];
+function openDB() {
+  return new Promise(res => {
+    try {
+      const r = indexedDB.open('swara-pocket', 1);
+      r.onupgradeneeded = e => e.target.result.createObjectStore('takes', { keyPath: 'id' });
+      r.onsuccess = e => { db = e.target.result; res(); };
+      r.onerror = () => res();
+      r.onblocked = () => res();
+    } catch (e) { res(); }
+  });
+}
+function putTake(t) {
+  if (!db) { mem.push(t); return Promise.resolve(); }
+  return new Promise(res => {
+    try {
+      const tx = db.transaction('takes', 'readwrite');
+      tx.objectStore('takes').put(t);
+      tx.oncomplete = res; tx.onerror = () => { mem.push(t); res(); };
+    } catch (e) { mem.push(t); res(); }
+  });
+}
+function allTakes() {
+  if (!db) return Promise.resolve(mem.slice());
+  return new Promise(res => {
+    try {
+      const out = [];
+      db.transaction('takes', 'readonly').objectStore('takes').openCursor().onsuccess = e => {
+        const c = e.target.result;
+        if (c) { out.push(c.value); c.continue(); } else res(out.concat(mem));
+      };
+    } catch (e) { res(mem.slice()); }
+  });
+}
+function deleteTake(id) {
+  mem = mem.filter(t => t.id !== id);
+  if (!db) return Promise.resolve();
+  return new Promise(res => {
+    try { const tx = db.transaction('takes', 'readwrite'); tx.objectStore('takes').delete(id); tx.oncomplete = res; tx.onerror = res; }
+    catch (e) { res(); }
+  });
+}
+
+/* ---------- takes sheet ---------- */
+function openSheet() { $('scrim').hidden = false; $('sheet').hidden = false; renderTakes(); }
+function closeSheet() { $('scrim').hidden = true; $('sheet').hidden = true; }
+$('takesBtn').onclick = openSheet;
+$('sheetClose').onclick = closeSheet;
+$('scrim').onclick = closeSheet;
+
+function stamp(t) {
+  const d = new Date(t.when), p = n => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + p(d.getMonth() + 1) + '-' + p(d.getDate()) + '-' + p(d.getHours()) + p(d.getMinutes());
+}
+
+async function renderTakes() {
+  const list = $('takeList');
+  const takes = (await allTakes()).sort((a, b) => b.id - a.id);
+  $('storeNote').textContent = db
+    ? 'Takes are kept on this phone, in this browser. Clearing Chrome\'s site data removes them, so save the ones you want to keep.'
+    : 'This browser is not allowing storage here, so takes last only until you close the page. Save the ones you want to keep.';
+  list.innerHTML = '';
+  if (!takes.length) {
+    list.innerHTML = '<div class="empty">No takes yet. Tap Record, sing, then tap Stop.</div>';
+    return;
+  }
+  for (const t of takes) {
+    const v = t.frames.filter(f => f.m != null).map(f => f.m);
+    const range = v.length ? nameOf(Math.round(Math.min(...v))) + ' to ' + nameOf(Math.round(Math.max(...v))) : 'no pitch heard';
+    const row = document.createElement('div'); row.className = 'row';
+    const when = new Date(t.when).toLocaleString(undefined, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    row.innerHTML = '<div class="when"></div><div class="meta"></div><div class="meta" style="grid-column:1 / -1"></div><div class="acts"></div>';
+    row.children[0].textContent = when;
+    row.children[1].textContent = fmt(t.dur);
+    row.children[2].textContent = range + ', Sa ' + nameOf(t.sa);
+    const acts = row.children[3];
+    const play = document.createElement('button'); play.type = 'button'; play.textContent = 'Play';
+    play.onclick = () => startPlay(t);
+    acts.appendChild(play);
+    if (t.audio) {
+      const save = document.createElement('button'); save.type = 'button'; save.textContent = 'Save audio';
+      save.onclick = () => saveTake(t, save);
+      acts.appendChild(save);
+    }
+    const del = document.createElement('button'); del.type = 'button'; del.className = 'danger'; del.textContent = 'Delete';
+    let armed = false;
+    del.onclick = () => {
+      if (!armed) { armed = true; del.textContent = 'Tap again to delete'; setTimeout(() => { armed = false; del.textContent = 'Delete'; }, 2500); return; }
+      deleteTake(t.id).then(renderTakes);
+    };
+    acts.appendChild(del);
+    list.appendChild(row);
+  }
+}
+
+/* ---------- playback ---------- */
+function startPlay(take) {
+  stopPlay();
+  if (recording) stopRec();
+  closeSheet();
+  const url = take.audio ? URL.createObjectURL(take.audio) : null;
+  const audio = url ? new Audio(url) : null;
+  playing = { take, audio, url, start: performance.now() / 1000 };
+  saMidi = take.sa; saSel.value = String(take.sa);
+  if (audio) { audio.onended = stopPlay; audio.play().catch(() => { playing && (playing.audio = null); }); }
+  $('pbar').hidden = false;
+  $('rec').disabled = true;
+  kick();
+}
+function playClock() {
+  const a = playing.audio;
+  if (a && !a.paused && isFinite(a.currentTime) && a.currentTime > 0) return a.currentTime;
+  return performance.now() / 1000 - playing.start;
+}
+function stopPlay() {
+  if (!playing) return;
+  const p = playing; playing = null;
+  if (p.audio) { try { p.audio.pause(); } catch (e) {} }
+  if (p.url) setTimeout(() => URL.revokeObjectURL(p.url), 1000);
+  $('pbar').hidden = true;
+  $('rec').disabled = false;
+  paintReadout(null);
+  if (listening) kick(); else draw();
+}
+$('pbarStop').onclick = stopPlay;
+
+/* ---------- saving a take's audio to the phone ---------- */
+const dlPromise = (window.claude && typeof window.claude.use === 'function')
+  ? window.claude.use('downloads').catch(() => null) : Promise.resolve(null);
+function flash(btn, text) { const old = btn.textContent; btn.textContent = text; setTimeout(() => btn.textContent = old, 2200); }
+async function saveTake(t, btn) {
+  const filename = 'swara-take-' + stamp(t) + '.' + t.ext;
+  const dl = await dlPromise;
+  if (dl) {
+    try { await dl.save({ filename, data: t.audio }); flash(btn, 'Saved'); }
+    catch (e) { flash(btn, e && e.code === 'declined' ? 'Cancelled' : 'Not available here'); }
+    return;
+  }
+  if (window.top === window) {
+    const u = URL.createObjectURL(t.audio);
+    const a = document.createElement('a'); a.href = u; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(u), 5000);
+    flash(btn, 'Saved');
+    return;
+  }
+  flash(btn, 'Not available here');
+}
+
+openDB();
+requestAnimationFrame(() => { size(); centreOnSa(); });
+</script>
+
+</body>
+</html>
