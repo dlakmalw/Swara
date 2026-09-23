@@ -268,19 +268,33 @@ const exampleFrames = (() => {
   return out;
 })();
 
-/* ---------- pitch detection (McLeod NSDF) ---------- */
-const WIN = 1024;
-function detect(x, sr) {
+/* ---------- pitch detection (McLeod NSDF) ----------
+   The raw detector is honest but jumpy: one noisy frame, a breath, or a
+   harmonic winning for a moment and the note drops out or leaps an octave.
+   The tracker below it is what makes the trace hold onto the voice:
+   - the input is halved to ~24 kHz so a longer 42 ms window fits in budget,
+     which steadies low notes, and it runs every screen frame, not every other;
+   - once a note is found it is easier to keep than to find (hysteresis on both
+     loudness and clarity), and the loudness gate follows the room's noise floor;
+   - while locked, the candidate nearest the current note wins over an octave jump;
+   - a jump of more than a semitone must repeat for three frames before it is believed;
+   - dropouts shorter than 180 ms are bridged by holding the last pitch;
+   - the value shown is lightly smoothed (about 40 ms), so it follows real
+     slides and vibrato but not frame-to-frame jitter. */
+const WIN = 1024, DEC = 2;
+let dbuf = null;
+function detect(x, sr, prev, clarityMin) {
+  const n = x.length;
   let rms = 0;
-  for (let i = 0; i < WIN; i++) rms += x[i] * x[i];
+  for (let i = n - WIN; i < n; i++) rms += x[i] * x[i];
   rms = Math.sqrt(rms / WIN);
-  if (rms < 0.0015) return 0;
   const minTau = Math.max(2, Math.floor(sr / 1100));
-  const maxTau = Math.min(Math.floor(sr / 55), x.length - WIN);
+  const maxTau = Math.min(Math.floor(sr / 55), n - WIN);
+  const off = n - WIN - maxTau;                   // analyse the newest audio
   const nsdf = new Float32Array(maxTau + 2);
   for (let tau = minTau; tau <= maxTau; tau++) {
     let acf = 0, div = 0;
-    for (let i = 0; i < WIN; i++) { const a = x[i], b = x[i + tau]; acf += a * b; div += a * a + b * b; }
+    for (let i = off; i < off + WIN; i++) { const a = x[i], b = x[i + tau]; acf += a * b; div += a * a + b * b; }
     nsdf[tau] = div > 0 ? (2 * acf) / div : 0;
   }
   const peaks = [];
@@ -293,33 +307,75 @@ function detect(x, sr) {
       peaks.push(best);
     } else tau++;
   }
-  if (!peaks.length) return 0;
+  const out = { rms, clarity: 0, m: null };
+  if (!peaks.length) return out;
   let hi = 0; for (const p of peaks) if (nsdf[p] > hi) hi = nsdf[p];
-  if (hi < 0.55) return 0;
+  out.clarity = hi;
+  if (hi < clarityMin) return out;
+  const refine = p => {
+    const y0 = nsdf[p - 1] || 0, y1 = nsdf[p], y2 = nsdf[p + 1] || 0;
+    const den = 2 * (2 * y1 - y0 - y2);
+    return ftom(sr / (p + (den !== 0 ? (y2 - y0) / den : 0)));
+  };
   let chosen = peaks[0];
   for (const p of peaks) { if (nsdf[p] >= 0.9 * hi) { chosen = p; break; } }
-  const y0 = nsdf[chosen - 1] || 0, y1 = nsdf[chosen], y2 = nsdf[chosen + 1] || 0;
-  const den = 2 * (2 * y1 - y0 - y2);
-  const hz = sr / (chosen + (den !== 0 ? (y2 - y0) / den : 0));
-  return (hz > 55 && hz < 1100) ? hz : 0;
+  let m = refine(chosen);
+  if (prev != null && Math.abs(m - prev) > 1.5) {  // locked: prefer the peak near the current note
+    let bestM = null, bestD = 1e9;
+    for (const p of peaks) {
+      if (nsdf[p] < 0.6 * hi) continue;
+      const pm = refine(p), d = Math.abs(pm - prev);
+      if (d < bestD) { bestD = d; bestM = pm; }
+    }
+    if (bestM != null && bestD < 1.5) m = bestM;
+  }
+  out.m = (m > ftom(55) && m < ftom(1100)) ? m : null;
+  return out;
 }
 
+const trk = { floor: 0.0008, locked: false, sm: null, lastVoiced: 0, pend: null, pendN: 0, med: [] };
+function resetTracker() { Object.assign(trk, { locked: false, sm: null, lastVoiced: 0, pend: null, pendN: 0, med: [] }); }
+
+let lastPaint = 0;
 function analyse() {
   analyser.getFloatTimeDomainData(buf);
-  const hz = detect(buf, ctx.sampleRate);
-  const raw = hz ? ftom(hz) : null;
-  hist.push(raw); if (hist.length > 3) hist.shift();
-  let m = null;
-  if (raw != null) {                              // median of recent voiced frames kills octave blips
-    const v = hist.filter(a => a != null).sort((a, b) => a - b);
-    m = v[Math.floor(v.length / 2)];
-  }
+  const half = buf.length / DEC;
+  if (!dbuf || dbuf.length !== half) dbuf = new Float32Array(half);
+  for (let i = 0; i < half; i++) dbuf[i] = 0.5 * (buf[2 * i] + buf[2 * i + 1]);
+  const sr = ctx.sampleRate / DEC;
   const t = performance.now() / 1000;
+
+  const r = detect(dbuf, sr, trk.locked ? trk.sm : null, trk.locked ? 0.45 : 0.62);
+  const gate = trk.locked ? Math.max(0.0005, trk.floor * 1.8) : Math.max(0.0009, trk.floor * 3);
+  let raw = (r.rms >= gate && r.m != null) ? r.m : null;
+  if (raw == null && r.rms < trk.floor * 4) {     // quiet and unpitched: learn the room
+    trk.floor += (r.rms - trk.floor) * (r.rms < trk.floor ? 0.2 : 0.02);
+    trk.floor = Math.max(0.0002, Math.min(0.02, trk.floor));
+  }
+
+  if (raw != null) {
+    trk.med.push(raw); if (trk.med.length > 5) trk.med.shift();
+    const v = trk.med.slice().sort((a, b) => a - b);
+    const med = v[Math.floor(v.length / 2)];
+    if (trk.sm == null) { trk.sm = med; }
+    else if (Math.abs(med - trk.sm) > 1) {          // a real note change must repeat
+      if (trk.pend != null && Math.abs(med - trk.pend) < 0.6) trk.pendN++; else { trk.pend = med; trk.pendN = 1; }
+      if (trk.pendN >= 3) { trk.sm = med; trk.med = [raw]; trk.pend = null; trk.pendN = 0; }
+    } else {
+      trk.pend = null; trk.pendN = 0;
+      trk.sm += (med - trk.sm) * 0.4;
+    }
+    trk.locked = true; trk.lastVoiced = t;
+  } else if (trk.locked && t - trk.lastVoiced > 0.18) {
+    trk.locked = false; trk.sm = null; trk.med = []; trk.pend = null; trk.pendN = 0;
+  }
+
+  const m = trk.locked ? trk.sm : null;
   live.push({ t, m });
   while (live.length && t - live[0].t > 9) live.shift();
   cur = m;
   if (recording) recording.frames.push({ t: +(t - recording.t0).toFixed(3), m: m == null ? null : +m.toFixed(3) });
-  paintReadout(m);
+  if (m == null || t - lastPaint > 0.08) { paintReadout(m); lastPaint = t; }   // numbers you can read
 }
 
 /* ---------- readout ---------- */
@@ -448,7 +504,7 @@ let raf = null, tick = 0;
 function kick() { if (!raf) raf = requestAnimationFrame(loop); }
 function loop() {
   raf = null;
-  if (listening && !playing && (++tick % 2 === 0)) analyse();
+  if (listening && !playing) analyse();
   if (playing) {
     const t = playClock(), d = playing.take.dur;
     $('pbarText').textContent = 'Playing take  ' + fmt(Math.min(t, d)) + ' / ' + fmt(d);
@@ -483,10 +539,10 @@ async function startListening() {
   ctx = new (window.AudioContext || window.webkitAudioContext)();
   try { await ctx.resume(); } catch (e) {}
   const srcNode = ctx.createMediaStreamSource(stream);
-  analyser = ctx.createAnalyser(); analyser.fftSize = 2048;
+  analyser = ctx.createAnalyser(); analyser.fftSize = 4096;
   buf = new Float32Array(analyser.fftSize);
   srcNode.connect(analyser);
-  listening = true; example = false; live = []; hist = [];
+  listening = true; example = false; live = []; hist = []; resetTracker();
   hideMsg();
   $('listen').textContent = 'Stop listening';
   holdScreen();
